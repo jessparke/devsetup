@@ -1,2 +1,7 @@
 #!/bin/sh
 #Use this to add packages to your machine when running wu_setup_dev
+cd /
+git clone git@github.com:TheWeatherCompany/wxu-metscripts.git
+yum -y install php-pgsql.x86_64
+yum -y install http://yum.postgresql.org/9.3/redhat/rhel-6-x86_64/pgdg-redhat93-9.3-1.noarch.rpm
+yum -y install postgresql93-server postgresql93-contrib service postgresql-9.3 initdb chkconfig postgresql-9.3 on

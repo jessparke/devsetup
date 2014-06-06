@@ -1,0 +1,109 @@
+#!/bin/sh
+# AMW 2014-02-13
+#
+# shell_post_puppet_apply
+# This script does all the dirty work of calling setup scripts from /software
+# 	The goal is to remove all of the functionality from this script and 
+#	the dependency on /software in any given datacenter
+#
+
+echo "######################################################"
+echo "Running Post-install script after Puppet Apply has run"
+
+#### Link branddata
+# This should be the prod link most likely... on a dev box, yes it should link to dev JJC
+# nfsmount takes care of this anyhow for production hosts
+#ln -s /software/prod/www/branddata_dev/ /prod/www/branddata
+
+#### Link hdfForecast as getForecast
+ln -s /prod/www/apache/cgi-bin/findweather/hdfForecast /prod/www/apache/cgi-bin/findweather/getForecast
+
+#### Install cityinfo
+yum -y install glibc.i686
+yum -y install readline.i686
+ln -s /lib/libreadline.so.6 /lib/libreadline.so.4
+
+SOFTWARE="software"
+if [ ! -d /prod/database/mysql/cityinfo ]
+then
+	rm -rf /prod/database/mysql/cityinfo
+	mkdir /prod/database/mysql/cityinfo
+	dbsize=`/${SOFTWARE}/dist/admin/scripts/shell_db_size www`
+	mount -t tmpfs -o size=$dbsize  tmpfs /prod/database/mysql/cityinfo
+
+	/software/dist/admin/scripts/shell_db_centos_install 
+else
+	/software/dist/admin/scripts/shell_db_centos_update 1
+fi
+
+
+#### NFS 
+cp -av /software/dist/packages/nfsmount/files/* /
+echo "sf" > /etc/datacenter
+cp /software/dist/types/www/files/config/nfsmount_mounts_www /config
+/scripts/shell_nfsmount_generate_fstab
+mount -a
+#### Fails the first time because mount points don't exist?
+#/scripts/shell_nfsmount_generate_fstab
+#mount -a
+ln -s /prod/www/branddata.ramdisk /prod/www/branddata
+
+
+#### Nutcracker
+if [ ! -d "/dist" ]; then
+	mkdir /dist
+fi
+if [ ! -d "/dist/admin" ]; then
+	mkdir /dist/admin
+fi
+/software/dist/packages/nutcracker/files/scripts/shell_check_restart_nutcracker
+#mkdir -p /dist/admin
+#cp /software/dist/admin/all_config_nutcracker /dist/admin/
+#cp /software/dist/admin/wui_cluster_config_wxstn_cur_nutcracker_redis_client /dist/admin/ 
+#cp /software/dist/admin/wui_cluster_config_wuidb_nutcracker_redis_client /dist/admin/ 
+
+yum install -y wu-nutcracker
+yum install -y redis
+#nohup /usr/local/bin/nutcracker --conf-file=/dist/admin/all_config_nutcracker &
+mkdir -p /dist/admin
+/software/dist/packages/nutcracker/files/scripts/shell_check_restart_nutcracker
+
+#cd /root
+#if [ ! -d "nutcracker-0.2.3" ]; then
+#	wget https://twemproxy.googlecode.com/files/nutcracker-0.2.3.tar.gz
+#	tar xvzf nutcracker-0.2.3.tar.gz
+#	cd nutcracker-0.2.3
+#	./configure
+#	make
+#	make install
+#   nohup /usr/local/bin/nutcracker --conf-file=/dist/admin/all_config_nutcracker &
+#fi
+
+#Get Sass working
+yum install -y rubygems
+gem install sass --version "=3.2.7"
+
+
+#######################
+# install /dist files
+#######################
+cp /${SOFTWARE}/dist/admin/SERVERCONFIG.hdf /dist/admin/
+cp /${SOFTWARE}/dist/admin/ips.block /dist/admin/
+cp /${SOFTWARE}/dist/admin/ips.block.api /dist/admin/
+cp /${SOFTWARE}/dist/admin/bots /dist/admin/
+cp /${SOFTWARE}/dist/admin/featuremenu.hdf /dist/admin/
+
+#USE /mnt/s3 for wx
+rm /wx; ln -s /mnt/s3/wx /wx
+
+
+#/etc/hosts
+cp /software/dist/packages/hosts/files/etc/hosts.sf /etc/hosts
+
+
+#######################
+# Copy over php.ini
+#######################
+cp ~/grid-config-mgmt/provisioners/puppet/modules/wu-datacenter/files/php.ini /etc/php.ini
+
+
